@@ -6,7 +6,7 @@
 ;; Control an RGB 32x16 LED panel.
 
 .avr8
-.include "tn2313def.inc"
+.include "m168def.inc"
 
 ;  cycles  time   @20MHz:
 ;   20000: 1ms
@@ -47,10 +47,8 @@
 
 .org 0x000
   rjmp start
-;.org 0x008
-;  rjmp service_interrupt
-;.org 0x00a
-;  rjmp service_interrupt
+.org 0x016  ; TIMER1 COMPA
+  rjmp service_interrupt
 
 start:
   ;; Interrupts off
@@ -94,32 +92,34 @@ memset:
   ;out SPL, r17
 
   ;; Setup UART - (fOSC / (baud * 16)) - 1 = UBRR
-  out UBRRH, r0
+  sts UBRR0H, r0
   ldi r17, 129
-  out UBRRL, r17           ; 129 @ 20MHz = 9600 baud
-  ldi r17, (1<<UCSZ0)|(1<<UCSZ1)    ; sets up data as 8N1
-  out UCSRC, r17
-  ldi r17, (1<<TXEN)|(1<<RXEN)      ; enables send/receive
-  out UCSRB, r17
-  out UCSRA, r0
+  sts UBRR0L, r17           ; 129 @ 20MHz = 9600 baud
+  ldi r17, (1<<UCSZ00)|(1<<UCSZ01)    ; sets up data as 8N1
+  sts UCSR0C, r17
+  ldi r17, (1<<TXEN0)|(1<<RXEN0)      ; enables send/receive
+  sts UCSR0B, r17
+  eor r17, r17
+  sts UCSR0A, r17
 
   ;; Set up TIMER1
-  ;lds r17, PRR
-  ;andi r17, 255 ^ (1<<PRTIM1)
-  ;sts PRR, r17                   ; turn of power management bit on TIM1
+  lds r17, PRR
+  andi r17, 255 ^ (1<<PRTIM1)    ; is this needed?
+  sts PRR, r17                   ; turn of power management bit on TIM1
 
-  ;ldi r17, (1000>>8)
-  ;out OCR1AH, r17
-  ;ldi r17, (1000&0xff)            ; compare to 1000 clocks (0.05ms)
-  ;out OCR1AL, r17
+  ldi r17, (60000>>8)
+  sts OCR1AH, r17
+  ldi r17, (60000&0xff)          ; compare to 60000
+  sts OCR1AL, r17
 
-  ;ldi r17, (1<<OCIE1A)
-  ;out TIMSK, r17                  ; enable interrupt comare A 
-  ;out TCCR1C, r0
-  ;out TCCR1A, r0                  ; normal counting (0xffff is top, count up)
-  ;ldi r17, (1<<CS10)|(1<<WGM12)   ; CTC OCR1A
-  ;out TCCR1B, r17                 ; prescale = 1 from clock source
+  ldi r17, (1<<OCIE1A)
+  sts TIMSK1, r17                ; enable interrupt comare A 
+  sts TCCR1C, r0
+  sts TCCR1A, r0                 ; normal counting (0xffff is top, count up)
+  ldi r17, (1<<CS10)|(1<<WGM12)  ; CTC OCR1A
+  sts TCCR1B, r17                ; prescale = 1 from clock source
 
+;; DEBUG
   ldi r24, '*'
   rcall send_byte
   
@@ -134,6 +134,7 @@ memset:
   ;; PD6     - CLK
   ;; PB7     - LAT
 
+.if 0
   ldi r17, 0x00
 next_row:
   out PORTD, r17
@@ -170,6 +171,7 @@ never_ending_loop:
   cbi PORTD, 4
   cbi PORTD, 3
   rjmp never_ending_loop
+.endif
 
 ;;;;; TEST
 
@@ -180,65 +182,34 @@ main:
   cpi r20, 32            ; if byte sent is > 32 (unsigned) then parse_command
   brsh parse_command
 
-  mov r21, r20           ; r21 is X
+  mov r22, r20           ; r22 is address high-byte
   rcall read_byte
-  mov r22, r20           ; r22 is Y
+  mov r21, r20           ; r21 is address low-byte
   rcall read_byte        ; r20 is color
-  lsl r22
-  lsl r22                ; Y = Y * 4 (so we point to byte offset of row)
-  mov r17, r21
-  lsr r17
-  lsr r17
-  lsr r17                ; r17 = X / 8
-  add r22, r17           ; r22 is now byte offset
-  andi r21, 7            ; r21 is now bit offset
 
   ldi r28, (SRAM_START)&0xff ; Y register points to plane 0
   ldi r29, (SRAM_START)>>8
 
-  add r28, r22           ; Y = Y + offset to byte
+  add r28, r21
   adc r29, r0
 
-  sbrc r20, 0            ; if ((color & 1) == 0) { clear_bit(); } else { set_bit(); }
-  rcall set_bit
-  sbrs r21, 0
-  rcall clr_bit
+  cpi r22, 1
+  breq update_high_section
+  cpi r22, 2
+  breq back_to_main 
 
-  ldi r28, (SRAM_START+64)&0xff ; Z register points to plane 1 
-  ldi r29, (SRAM_START+64)>>8
+  ld r17, Y
+  andi r17, 0x03
+  or r17, r20
+  st Y, r17 
 
-  add r28, r22           ; Y = Y + offset to byte
-  adc r29, r0
+  rjmp back_to_main
 
-  sbrc r20, 1            ; if ((color & 2) == 0) { clear_bit(); } else { set_bit(); }
-  rcall set_bit
-  sbrs r21, 1
-  rcall clr_bit
+update_high_section:
 
-  out UDR, r2            ; send a '*'
+back_to_main:
+  sts UDR0, r2           ; send a '*'
   rjmp main
-
-set_bit:
-  ldi r30, (bit_on_table * 2) & 0xff ; Z points to mask table
-  ldi r31, (bit_on_table * 2) >> 8
-  add r30, r21           ; NOTE: This could have been done with a 16 bit add
-  adc r31, r0
-  lpm r5, Z              ; r5 holds bit mask
-  ld r6, Y               ; r6 holds current byte
-  or r6, r5              ; r6 = r6 | r5
-  st Y, r6               ; put r6 back into display RAM
-  ret
-
-clr_bit:
-  ldi r30, (bit_on_table * 2) & 0xff ; Z points to mask table
-  ldi r31, (bit_on_table * 2) >> 8
-  add r30, r21           ; NOTE: This could have been done with a 16 bit add
-  adc r31, r0
-  lpm r5, Z              ; r5 holds bit mask
-  ld r6, Y               ; r6 holds current byte
-  and r6, r5             ; r6 = r6 & r5
-  st Y, r6               ; put r6 back into display RAM
-  ret
 
 parse_command:
   cpi r20, 0xff
@@ -282,7 +253,7 @@ not_fb:
 not_fa:
 
 parse_command_exit:
-  out UDR, r2            ; send a '*'
+  sts UDR0, r2            ; send a '*'
   rjmp main
 
 send_led_data:
@@ -314,17 +285,19 @@ service_interrupt:
   out SREG, r7
   reti
 
-; void send_byte(r24)
+; void send_byte(r20)
 send_byte:
-  sbis UCSRA, UDRE
-  rjmp send_byte      ; if it's not okay, loop around :)
-  out UDR, r24        ; output a char over rs232
+  lds r14, UCSR0A
+  sbrs r14, UDRE0
+  rjmp send_byte      ; if it's not okay, loop around
+  sts UDR0, r20       ; output a char over rs232
   ret
 
 read_byte:
-  sbis UCSRA, RXC
+  lds r20, UCSR0A
+  sbrs r20, RXC0
   rjmp read_byte      ; while(no data);
-  in r20, UDR
+  lds r20, UDR0
   ret
 
 bit_on_table:
