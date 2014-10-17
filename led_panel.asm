@@ -182,30 +182,41 @@ main:
   cpi r20, 32            ; if byte sent is > 32 (unsigned) then parse_command
   brsh parse_command
 
-  mov r22, r20           ; r22 is address high-byte
+  mov r22, r20           ; r22 is address high_byte
   rcall read_byte
-  mov r21, r20           ; r21 is address low-byte
+  mov r21, r20           ; r21 is address low_byte
   rcall read_byte        ; r20 is color
 
-  ldi r28, (SRAM_START)&0xff ; Y register points to plane 0
+  ;; Y = buffer + low_byte
+  ldi r28, (SRAM_START)&0xff ; Y register points to buffer
   ldi r29, (SRAM_START)>>8
 
   add r28, r21
   adc r29, r0
 
+  ;; since the lower and upper rows share the same bytes, figure out if
+  ;; high byte is 0 or 1, or 2 (invalid)
   cpi r22, 1
   breq update_high_section
   cpi r22, 2
   breq back_to_main 
 
+  ;; [Y] = ([Y] & 0xf8) | color
   ld r17, Y
-  andi r17, 0x03
+  andi r17, 0xf8
   or r17, r20
   st Y, r17 
-
   rjmp back_to_main
 
 update_high_section:
+  ;; [Y] = ([Y] & 0x03) | (color << 3)
+  lsl r20
+  lsl r20
+  lsl r20
+  ld r17, Y
+  andi r17, 0xf8
+  or r17, r20
+  st Y, r17 
 
 back_to_main:
   sts UDR0, r2           ; send a '*'
@@ -234,23 +245,27 @@ not_fd:
 
   cpi r20, 0xfc
   brne not_fc
-  rcall read_byte
-  mov r12, r20
+  rcall shift_left
   rjmp parse_command_exit
 not_fc:
 
   cpi r20, 0xfb
   brne not_fb
-  rcall read_byte
-  mov r13, r20
+  rcall shift_right
   rjmp parse_command_exit
 not_fb:
 
   cpi r20, 0xfa
   brne not_fa
-  rcall shift_left
+  rcall shift_up
   rjmp parse_command_exit
 not_fa:
+
+  cpi r20, 0xf9
+  brne not_f9
+  rcall shift_down
+  rjmp parse_command_exit
+not_f9:
 
 parse_command_exit:
   sts UDR0, r2            ; send a '*'
@@ -280,6 +295,22 @@ service_interrupt:
   ; save status register
   in r7, SREG
 
+  ldi r30, (SRAM_START)&0xff ; Z register points to buffer
+  ldi r31, (SRAM_START)>>8
+  ldi r18, 32 
+draw_loop:
+  ld r16, Z+
+  out PORTB, r16
+  sbi PORTD, 6       ; CLK HIGH
+  cbi PORTD, 6       ; CLK LOW
+  dec r18
+  brne draw_loop
+
+  sbi PORTD, 2       ; Chip select
+  sbi PORTB, 7       ; Latch
+  cbi PORTB, 7
+  cbi PORTD, 2
+
   ; increment interrupt counter
   inc r23
   out SREG, r7
@@ -300,12 +331,6 @@ read_byte:
   lds r20, UDR0
   ret
 
-bit_on_table:
-.db 128, 64, 32, 16, 8, 4, 2, 1
-
-bit_off_table:
-.db 128^0xff, 64^0xff, 32^0xff, 16^0xff, 8^0xff, 4^0xff, 2^0xff, 1^0xff
-
 signature:
-.db "LED Panel 2 - Copyright 2014 - Michael Kohn - Version 0.01",0
+.db "LED Panel 2 - Copyright 2014 - Michael Kohn - Version 0.02",0
 
