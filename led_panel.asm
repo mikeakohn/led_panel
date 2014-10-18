@@ -21,22 +21,23 @@
 ; r0  = 0
 ; r1  = 1
 ; r2  = '*'
-; r3  =
+; r3  = (interrupt) current drawing row
 ; r4  =
 ; r5  =
 ; r6  =
 ; r7  =
 ; r8  = 8
-; r10 = palette 0
-; r11 = palette 1
-; r12 = palette 2
-; r13 = palette 3
+; r10 =
+; r11 =
+; r12 =
+; r13 =
+; r16 = (interrupt) temp
 ; r17 = temp
-; r18 =
+; r18 = (interrupt) temp
 ; r19 =
 ; r20 = input from UART
-; r21 = X
-; r22 = Y
+; r21 =
+; r22 =
 ; r23 =
 ;
 
@@ -63,18 +64,19 @@ start:
   ldi r17, 8 
   mov r8, r17
 
-  ;; Set up PORTB
-  ;; PB5-PB0 - R2,G2,B2,R1,G1,B1
-  ;; PD5-PD3 - C,B,A
-  ;; PD2     - OE
-  ;; PD6     - CLK
-  ;; PB7     - LAT
+  ;; Set up PORTB,PORTC,PORTD
+  ;; PB2-PB0 - C,B,A
+  ;; PC5-PC0 - R2,G2,B2,R1,G1,B1
+  ;; PD5     - CLK
+  ;; PD6     - LAT
+  ;; PD7     - OE
   ldi r17, 0xff
-  ldi r18, 0
   out DDRB, r17      ; all of PORTB will be output
-  out PORTB, r18     ; turn off all of port B
+  out PORTB, r0      ; turn off all of port B
+  out DDRC, r17      ; all of PORTB will be output
+  out PORTC, r0      ; turn off all of port C
   out DDRD, r17      ; all of PORTD will be output
-  out PORTD, r18     ; turn off all of port D
+  out PORTD, r0      ; turn off all of port D
 
   ;; Clear LED RAM (32 * 16 * 3 bytes / 8)
   ldi r28, (SRAM_START)&0xff
@@ -118,6 +120,9 @@ memset:
   sts TCCR1A, r0                 ; normal counting (0xffff is top, count up)
   ldi r17, (1<<CS10)|(1<<WGM12)  ; CTC OCR1A
   sts TCCR1B, r17                ; prescale = 1 from clock source
+
+  ;; Set up variable registers
+  mov r3, r0  ; current drawing row starts with 0
 
 ;; DEBUG
   ldi r24, '*'
@@ -225,7 +230,7 @@ back_to_main:
 parse_command:
   cpi r20, 0xff
   brne not_ff
-  rcall send_led_data
+  rcall page_flip
   rjmp parse_command_exit
 not_ff:
 
@@ -271,12 +276,7 @@ parse_command_exit:
   sts UDR0, r2            ; send a '*'
   rjmp main
 
-send_led_data:
-  ;; PB5-PB0 - R2,G2,B2,R1,G1,B1
-  ;; PD5-PD3 - C,B,A
-  ;; PD2     - OE
-  ;; PD6     - CLK
-  ;; PB7     - LAT
+page_flip:
   ret
 
 shift_left:
@@ -297,19 +297,31 @@ service_interrupt:
 
   ldi r30, (SRAM_START)&0xff ; Z register points to buffer
   ldi r31, (SRAM_START)>>8
-  ldi r18, 32 
-draw_loop:
-  ld r16, Z+
-  out PORTB, r16
-  sbi PORTD, 6       ; CLK HIGH
-  cbi PORTD, 6       ; CLK LOW
-  dec r18
-  brne draw_loop
+  mov r18, r3        ; r18 = (r3 & 0x07) * 32
+  andi r18, 0x07
+  swap r18
+  lsl r18
+  add r30, r18       ; Z = Z + r18
+  adc r30, r0
 
-  sbi PORTD, 2       ; Chip select
-  sbi PORTB, 7       ; Latch
-  cbi PORTB, 7
-  cbi PORTD, 2
+  ldi r18, 32        ; for (r18 = 0; r18 < 32; r18++)
+draw_loop:           ; {
+  ld r16, Z+
+  out PORTC, r16
+  sbi PORTD, 5       ; CLK HIGH
+  cbi PORTD, 5       ; CLK LOW
+  dec r18
+  brne draw_loop     ; }
+
+  cbi PORTD, 7       ; Output Disable
+  sbi PORTD, 6       ; Latch on
+  out PORTB, r3      ; Move to current row
+  cbi PORTD, 6       ; Latch off
+  sbi PORTD, 7       ; Output Enable
+
+  inc r3
+  ;ldi r18, 0x07      
+  ;and r3, r18
 
   ; increment interrupt counter
   inc r23
