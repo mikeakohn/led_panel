@@ -22,24 +22,31 @@
 ; r1  = 1
 ; r2  = '*'
 ; r3  = (interrupt) current drawing row
-; r4  =
-; r5  =
-; r6  =
-; r7  =
+; r4  = 
+; r5  = display buffer high
+; r6  = display buffer low
+; r7  = (interrupt) status register save
 ; r8  = 8
-; r10 =
-; r11 =
-; r12 =
-; r13 =
+; r9  = flip flag
+; r10 = draw buffer low
+; r11 = draw buffer high
+; r12 = display buffer low
+; r13 = display buffer high
+; r14 =
 ; r16 = (interrupt) temp
 ; r17 = temp
 ; r18 = (interrupt) temp
 ; r19 =
 ; r20 = input from UART
-; r21 =
-; r22 =
+; r21 = pixel number low
+; r22 = pixel number high
 ; r23 =
-;
+; r26 = X low - points to display buffer
+; r27 = X high
+; r28 = Y low - points to draw buffer
+; r29 = Y high
+; r30 = (interrupt) Z low - points to display buffer
+; r31 = (interrupt) Z high
 
 ; note: With debugWire off
 ;  EXTENDED: 0xff
@@ -123,6 +130,13 @@ memset:
 
   ;; Set up variable registers
   mov r3, r0  ; current drawing row starts with 0
+  mov r9, r0  ; do not flip buffers
+  ldi r28, (SRAM_START)&0xff ; Y register points to draw buffer
+  ldi r29, (SRAM_START)>>8
+  ldi r26, (SRAM_START)&0xff ; X register points to display buffer
+  ldi r27, (SRAM_START)>>8
+  movw r10, r28
+  movw r12, r26
 
 ;; DEBUG
   ldi r24, '*'
@@ -130,56 +144,6 @@ memset:
   
   ; Interrupts enabled
   sei
-
-
-;;;;; TEST
-  ;; PB5-PB0 - R2,G2,B2,R1,G1,B1
-  ;; PD5-PD3 - C,B,A
-  ;; PD2     - OE
-  ;; PD6     - CLK
-  ;; PB7     - LAT
-
-.if 0
-  ldi r17, 0x00
-next_row:
-  out PORTD, r17
-  ldi r18, 0x19
-  out PORTB, r18
-
-  ;; clock out 2 bits
-  sbi PORTD, 6
-  cbi PORTD, 6
-  sbi PORTD, 6
-  cbi PORTD, 6
-  out PORTB, r0
-  ldi r18, 30
-clock_next_bit:
-  sbi PORTD, 6
-  cbi PORTD, 6
-  dec r18
-  brne clock_next_bit
-
-  sbi PORTD, 2
-  sbi PORTB, 7
-  cbi PORTB, 7
-  cbi PORTD, 2
-
-  add r17, r8
-  cpi r17, 0x38
-  brne next_row
-
-never_ending_loop:
-  sbi PORTD, 3
-  cbi PORTD, 3
-  sbi PORTD, 4
-  sbi PORTD, 3
-  cbi PORTD, 4
-  cbi PORTD, 3
-  rjmp never_ending_loop
-.endif
-
-;;;;; TEST
-
 
 main:
   rcall read_byte
@@ -193,8 +157,7 @@ main:
   rcall read_byte        ; r20 is color
 
   ;; Y = buffer + low_byte
-  ldi r28, (SRAM_START)&0xff ; Y register points to buffer
-  ldi r29, (SRAM_START)>>8
+  movw r28, r10          ; Y register points to draw buffer
 
   add r28, r21
   adc r29, r0
@@ -230,21 +193,19 @@ back_to_main:
 parse_command:
   cpi r20, 0xff
   brne not_ff
-  rcall page_flip
+  mov r9, r1 
   rjmp parse_command_exit
 not_ff:
 
   cpi r20, 0xfe
   brne not_fe
-  rcall read_byte
-  mov r10, r20
+  rcall clear_draw_buffer
   rjmp parse_command_exit
 not_fe:
 
   cpi r20, 0xfd
   brne not_fd
-  rcall read_byte
-  mov r11, r20
+  rcall copy_display_buffer
   rjmp parse_command_exit
 not_fd:
 
@@ -279,6 +240,12 @@ parse_command_exit:
 page_flip:
   ret
 
+clear_draw_buffer:
+  ret
+
+copy_display_buffer:
+  ret
+
 shift_left:
   ret
 
@@ -295,10 +262,8 @@ service_interrupt:
   ; save status register
   in r7, SREG
 
-  ldi r30, (SRAM_START)&0xff ; Z register points to buffer
-  ldi r31, (SRAM_START)>>8
-  mov r18, r3        ; r18 = (r3 & 0x07) * 32
-  andi r18, 0x07
+  movw r30, r12      ; Z register points to display buffer
+  mov r18, r3        ; r18 = r3 * 32
   swap r18
   lsl r18
   add r30, r18       ; Z = Z + r18
@@ -319,12 +284,20 @@ draw_loop:           ; {
   cbi PORTD, 6       ; Latch off
   sbi PORTD, 7       ; Output Enable
 
-  inc r3
-  ;ldi r18, 0x07      
-  ;and r3, r18
+  inc r3             ; r3 = (r3 + 1) & 0x07
+  ldi r18, 0x07      
+  and r3, r18
+  brne exit_interrupt ; if r3 != 0 then exit_interrupt
 
-  ; increment interrupt counter
-  inc r23
+  cp r9, r0           ; if r9 == 0 then exit_interrupt
+  breq exit_interrupt
+
+  movw r26, r28       ; temp = draw buffer
+  movw r28, r30       ; draw buffer = display buffer
+  movw r30, r26       ; display buffer = temp
+  mov r9, r0          ; flip flag = 0
+
+exit_interrupt:
   out SREG, r7
   reti
 
