@@ -85,15 +85,6 @@ start:
   out DDRD, r17      ; all of PORTD will be output
   out PORTD, r0      ; turn off all of port D
 
-  ;; Clear LED RAM (32 * 16 * 3 bytes / 8)
-  ldi r28, (SRAM_START)&0xff
-  ldi r29, (SRAM_START)>>8
-  ldi r23, 128
-memset:
-  st Y+, r0
-  dec r23
-  brne memset
-
   ;; Set up stack ptr
   ;ldi r17, RAMEND>>8
   ;out SPH, r17
@@ -137,6 +128,8 @@ memset:
   ldi r27, (SRAM_START)>>8
   movw r10, r28
   movw r12, r26
+
+  rcall clear_draw_buffer
 
 ;; DEBUG
   ldi r24, '*'
@@ -241,9 +234,23 @@ page_flip:
   ret
 
 clear_draw_buffer:
+  movw r28, r10
+  ldi r20, 0         ; 32 * 16 / 2 = 256 bytes
+memset:
+  st Y+, r0
+  dec r20
+  brne memset
   ret
 
 copy_display_buffer:
+  movw r28, r10
+  movw r26, r12
+  ldi r20, 0         ; 32 * 16 / 2 = 256 bytes
+memcpy:
+  ld r21, X+
+  st Y+, r21
+  dec r20
+  brne memcpy
   ret
 
 shift_left:
