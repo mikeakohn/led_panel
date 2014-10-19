@@ -3,7 +3,7 @@
 import time
 from led_panel import led_panel
 
-leds = led_panel("/dev/ttyUSB0")
+leds = led_panel("/dev/ttyUSB1")
 
 #ser = serial.Serial("/dev/ttyUSB0", 9600)
 

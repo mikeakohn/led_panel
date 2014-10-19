@@ -77,10 +77,10 @@ start:
   ;; PC5     - CLK
   ;; PC4     - OE
   ;; PD2     - LAT
-  ldi r17, 0xff
-  out DDRB, r17      ; all of PORTB will be output
+  ldi r17, 0x3f
+  out DDRB, r17      ; PB0-PB5 of PORTB will be output
   out PORTB, r0      ; turn off all of port B
-  out DDRC, r17      ; all of PORTB will be output
+  out DDRC, r17      ; PC0-PC5 of PORTC will be output
   out PORTC, r0      ; turn off all of port C
   ldi r17, 0x04
   out DDRD, r17      ; PD2 is output
@@ -107,9 +107,9 @@ start:
   andi r17, 255 ^ (1<<PRTIM1)    ; is this needed?
   sts PRR, r17                   ; turn of power management bit on TIM1
 
-  ldi r17, (60000>>8)
+  ldi r17, (30000>>8)
   sts OCR1AH, r17
-  ldi r17, (60000&0xff)          ; compare to 60000
+  ldi r17, (30000&0xff)          ; compare to 60000
   sts OCR1AL, r17
 
   ldi r17, (1<<OCIE1A)
@@ -130,11 +130,7 @@ start:
   movw r12, r26
 
   rcall clear_draw_buffer
-
-;; DEBUG
-  ;ldi r20, '*'
-  ;rcall send_byte
-  
+ 
   ; Interrupts enabled
   sei
 
@@ -281,7 +277,7 @@ service_interrupt:
   swap r18
   lsl r18
   add r30, r18       ; Z = Z + r18
-  adc r30, r0
+  adc r31, r0
 
   ldi r18, 32        ; for (r18 = 0; r18 < 32; r18++)
 draw_loop:           ; {
@@ -292,13 +288,13 @@ draw_loop:           ; {
   dec r18
   brne draw_loop     ; }
 
-  cbi PORTC, 4       ; Output Disable
-  sbi PORTD, 2       ; Latch on
-  out PORTC, r3      ; Move to current row
-  cbi PORTD, 2       ; Latch off
-  sbi PORTC, 4       ; Output Enable
+  sbi PORTC, 4        ; Output Disable
+  sbi PORTD, 2        ; Latch on
+  cbi PORTD, 2        ; Latch off
+  out PORTC, r3       ; Move to current row
+  ;cbi PORTC, 4        ; Output Enable (the above line already does this)
 
-  inc r3             ; r3 = (r3 + 1) & 0x07
+  inc r3              ; r3 = (r3 + 1) & 0x07
   ldi r18, 0x07      
   and r3, r18
   brne exit_interrupt ; if r3 != 0 then exit_interrupt
