@@ -122,14 +122,15 @@ start:
   ;; Set up variable registers
   mov r3, r0  ; current drawing row starts with 0
   mov r9, r0  ; do not flip buffers
-  ldi r28, (SRAM_START)&0xff ; Y register points to draw buffer
+  ldi r28, (SRAM_START)&0xff     ; Y register points to draw buffer
   ldi r29, (SRAM_START)>>8
-  ldi r26, (SRAM_START)&0xff ; X register points to display buffer
-  ldi r27, (SRAM_START)>>8
+  ldi r26, (SRAM_START+512)&0xff ; X register points to display buffer
+  ldi r27, (SRAM_START+512)>>8
   movw r10, r28
   movw r12, r26
 
   rcall clear_draw_buffer
+  rcall clear_display_buffer
  
   ; Interrupts enabled
   sei
@@ -176,7 +177,7 @@ update_high_section:
   lsl r20
   lsl r20
   ld r17, Y
-  andi r17, 0xf8
+  andi r17, 0x07
   or r17, r20
   st Y, r17 
 
@@ -188,7 +189,7 @@ back_to_main:
 parse_command:
   cpi r20, 0xff
   brne not_ff
-  mov r9, r1 
+  rcall page_flip
   rjmp parse_command_exit
 not_ff:
 
@@ -234,6 +235,10 @@ parse_command_exit:
   rjmp main
 
 page_flip:
+  mov r9, r1
+page_flip_wait:
+  cp r9, r0
+  brne page_flip_wait
   ret
 
 clear_draw_buffer:
@@ -243,6 +248,15 @@ memset:              ; {
   st Y+, r0          ; [Y++] = 0
   dec r20
   brne memset        ; }
+  ret
+
+clear_display_buffer:
+  movw r28, r12
+  ldi r20, 0         ; for (r20 = 0; r20 < 256; r20++)
+memset_display:      ; {
+  st Y+, r0          ; [Y++] = 0
+  dec r20
+  brne memset_display; }
   ret
 
 copy_display_buffer:
@@ -302,9 +316,9 @@ draw_loop:           ; {
   cp r9, r0           ; if r9 == 0 then exit_interrupt
   breq exit_interrupt
 
-  movw r26, r28       ; temp = draw buffer
-  movw r28, r30       ; draw buffer = display buffer
-  movw r30, r26       ; display buffer = temp
+  movw r26, r10       ; temp = draw buffer
+  movw r10, r12       ; draw buffer = display buffer
+  movw r12, r26       ; display buffer = temp
   mov r9, r0          ; flip flag = 0
 
 exit_interrupt:

@@ -10,7 +10,8 @@ class led_panel:
   def close(self):
     self.ser.close()
 
-  def plot(self, address, color):
+  def plot(self, x, y, color):
+    address = (y * 32) + x
     self.ser.write(chr(address >> 8))
     self.ser.write(chr(address & 0xff))
     self.ser.write(chr(color))
