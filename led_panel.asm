@@ -36,7 +36,7 @@
 ; r16 = (interrupt) temp
 ; r17 = temp
 ; r18 = (interrupt) temp
-; r19 =
+; r19 = (interrupt) temp
 ; r20 = input from UART
 ; r21 = pixel number low
 ; r22 = pixel number high
@@ -271,8 +271,8 @@ memcpy:              ; {
   ret
 
 shift_left:
-  movw r28, r12       ; Y = draw_buffer
-  movw r26, r12
+  movw r28, r10       ; Y = draw_buffer
+  movw r26, r10
   adiw r26, 1         ; X = draw_buffer + 1
   ldi r20, 255        ; for (r20 = 0; r20 < 255; r20++)
 shift_left_loop:      ; {
@@ -280,9 +280,9 @@ shift_left_loop:      ; {
   st Y+, r17          ; [Y++] = r17
   dec r20
   brne shift_left_loop; }
-  movw r28, r12
-  adiw r28, 15        ; Y = draw_buffer + 15
-  ldi r20, 16         ; for (r20 = 0; r20 < 16; r20++)
+  movw r28, r10
+  adiw r28, 31        ; Y = draw_buffer + 31
+  ldi r20, 8          ; for (r20 = 0; r20 < 8; r20++)
 shift_left_clear:     ; {
   st Y, r0            ; [Y] = 0
   adiw r28, 32        ; Y += 32
@@ -292,9 +292,11 @@ shift_left_clear:     ; {
 
 shift_right:
   ldi r20, 255
-  movw r28, r12       ; Y = draw_buffer + 255
-  add r28, r17
+  movw r28, r10       ; Y = draw_buffer + 256
+  add r28, r20
   adc r29, r0
+  movw r26, r28       ; X = draw_buffer + 255
+  adiw r28, 1
   ;adiw r28, 63
   ;adiw r28, 63
   ;adiw r28, 63
@@ -302,15 +304,14 @@ shift_right:
   ;adiw r28, 3
   ;movw r26, r18
   ;adiw r26, 1         ; X = Y - 1
-  ;ldi r20, 255        ; for (r20 = 0; r20 < 255; r20++)
+  ldi r20, 255        ; for (r20 = 0; r20 < 255; r20++)
 shift_right_loop:     ; {
-  ld r17, Y           ; r17 = [y--]
-  sbiw r28, 1
-  st Y, r17           ; [Y] = r17
+  ld r17, -X          ; r17 = [--X]
+  st -Y, r17          ; [--Y] = r17
   dec r20
   brne shift_right_loop; }
-  movw r28, r12       ; Y = draw_buffer
-  ldi r20, 16         ; for (r20 = 0; r20 < 16; r20++)
+  movw r28, r10       ; Y = draw_buffer
+  ldi r20, 8          ; for (r20 = 0; r20 < 8; r20++)
 shift_right_clear:    ; {
   st Y, r0            ; [Y] = 0
   adiw r28, 32        ; Y += 32
@@ -319,8 +320,8 @@ shift_right_clear:    ; {
   ret
 
 shift_up:
-  movw r28, r12       ; Y = draw_buffer
-  movw r26, r12
+  movw r28, r10       ; Y = draw_buffer
+  movw r26, r10
   adiw r26, 32        ; X = draw_buffer + 32
   ldi r20, 256-32     ; for (r20 = 0; r20 < 256-32; r20++)
 shift_up_loop:        ; {
@@ -329,7 +330,7 @@ shift_up_loop:        ; {
   dec r20
   brne shift_up_loop  ; }
   ldi r17, 224
-  movw r28, r12
+  movw r28, r10
   add r28, r17        ; Y = draw_buffer + 224
   adc r29, r0
   ldi r20, 32         ; for (r20 = 0; r20 < 32; r20++)
@@ -343,7 +344,7 @@ shift_up_clear:       ; {
 
 shift_down:
   ldi r20, 255
-  movw r28, r12       ; Y = draw_buffer
+  movw r28, r10       ; Y = draw_buffer
   add r28, r20
   adc r29, r0
   adiw r28, 1
@@ -355,7 +356,7 @@ shift_down_loop:        ; {
   st -Y, r17          ; [--Y] = r17
   dec r20
   brne shift_down_loop  ; }
-  movw r28, r12       ; Y = draw_buffer
+  movw r28, r10       ; Y = draw_buffer
   ldi r20, 32         ; for (r20 = 0; r20 < 32; r20++)
 shift_down_clear:       ; {
   st Y+, r0           ; [Y] = 0
@@ -397,9 +398,9 @@ draw_loop:           ; {
   cp r9, r0           ; if r9 == 0 then exit_interrupt
   breq exit_interrupt
 
-  movw r26, r10       ; temp = draw buffer
+  movw r18, r10       ; temp = draw buffer
   movw r10, r12       ; draw buffer = display buffer
-  movw r12, r26       ; display buffer = temp
+  movw r12, r18       ; display buffer = temp
   mov r9, r0          ; flip flag = 0
 
 exit_interrupt:
