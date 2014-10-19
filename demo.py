@@ -38,7 +38,7 @@ def draw_mandel(real_start, real_end, imaginary_start, imaginary_end):
 
 # ---------------------------- fold here ----------------------------------
 
-leds = led_panel("/dev/ttyUSB1")
+leds = led_panel("/dev/ttyUSB0")
 
 leds.clear_draw_buffer()
 leds.page_flip()

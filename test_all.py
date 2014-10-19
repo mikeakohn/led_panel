@@ -3,7 +3,7 @@
 import time
 from led_panel import led_panel
 
-leds = led_panel("/dev/ttyUSB1")
+leds = led_panel("/dev/ttyUSB0")
 
 leds.clear_draw_buffer()
 leds.page_flip()
