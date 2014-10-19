@@ -271,15 +271,96 @@ memcpy:              ; {
   ret
 
 shift_left:
+  movw r28, r12       ; Y = draw_buffer
+  movw r26, r12
+  adiw r26, 1         ; X = draw_buffer + 1
+  ldi r20, 255        ; for (r20 = 0; r20 < 255; r20++)
+shift_left_loop:      ; {
+  ld r17, X+          ; r17 = [X++]
+  st Y+, r17          ; [Y++] = r17
+  dec r20
+  brne shift_left_loop; }
+  movw r28, r12
+  adiw r28, 15        ; Y = draw_buffer + 15
+  ldi r20, 16         ; for (r20 = 0; r20 < 16; r20++)
+shift_left_clear:     ; {
+  st Y, r0            ; [Y] = 0
+  adiw r28, 32        ; Y += 32
+  dec r20
+  brne shift_left_clear; }
   ret
 
 shift_right:
+  ldi r20, 255
+  movw r28, r12       ; Y = draw_buffer + 255
+  add r28, r17
+  adc r29, r0
+  ;adiw r28, 63
+  ;adiw r28, 63
+  ;adiw r28, 63
+  ;adiw r28, 63
+  ;adiw r28, 3
+  ;movw r26, r18
+  ;adiw r26, 1         ; X = Y - 1
+  ;ldi r20, 255        ; for (r20 = 0; r20 < 255; r20++)
+shift_right_loop:     ; {
+  ld r17, Y           ; r17 = [y--]
+  sbiw r28, 1
+  st Y, r17           ; [Y] = r17
+  dec r20
+  brne shift_right_loop; }
+  movw r28, r12       ; Y = draw_buffer
+  ldi r20, 16         ; for (r20 = 0; r20 < 16; r20++)
+shift_right_clear:    ; {
+  st Y, r0            ; [Y] = 0
+  adiw r28, 32        ; Y += 32
+  dec r20
+  brne shift_right_clear; }
   ret
 
 shift_up:
+  movw r28, r12       ; Y = draw_buffer
+  movw r26, r12
+  adiw r26, 32        ; X = draw_buffer + 32
+  ldi r20, 256-32     ; for (r20 = 0; r20 < 256-32; r20++)
+shift_up_loop:        ; {
+  ld r17, X+          ; r17 = [X++]
+  st Y+, r17          ; [Y++] = r17
+  dec r20
+  brne shift_up_loop  ; }
+  ldi r17, 224
+  movw r28, r12
+  add r28, r17        ; Y = draw_buffer + 224
+  adc r29, r0
+  ldi r20, 32         ; for (r20 = 0; r20 < 32; r20++)
+shift_up_clear:       ; {
+  ld r17, Y
+  andi r17, 0x07
+  st Y+, r17          ; [Y] = [Y] & 0x07
+  dec r20
+  brne shift_up_clear;}
   ret
 
 shift_down:
+  ldi r20, 255
+  movw r28, r12       ; Y = draw_buffer
+  add r28, r20
+  adc r29, r0
+  adiw r28, 1
+  movw r26, r28
+  adiw r26, 32        ; X = draw_buffer + 32
+  ldi r20, 256-32     ; for (r20 = 0; r20 < 256-32; r20++)
+shift_down_loop:        ; {
+  ld r17, -X          ; r17 = [--X]
+  st -Y, r17          ; [--Y] = r17
+  dec r20
+  brne shift_down_loop  ; }
+  movw r28, r12       ; Y = draw_buffer
+  ldi r20, 32         ; for (r20 = 0; r20 < 32; r20++)
+shift_down_clear:       ; {
+  st Y+, r0           ; [Y] = 0
+  dec r20
+  brne shift_down_clear;}
   ret
 
 service_interrupt:
