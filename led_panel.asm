@@ -32,7 +32,7 @@
 ; r11 = draw buffer high
 ; r12 = display buffer low
 ; r13 = display buffer high
-; r14 =
+; r14 = used in send_byte
 ; r16 = (interrupt) temp
 ; r17 = temp
 ; r18 = (interrupt) temp
@@ -72,17 +72,18 @@ start:
   mov r8, r17
 
   ;; Set up PORTB,PORTC,PORTD
-  ;; PB2-PB0 - C,B,A
-  ;; PC5-PC0 - R2,G2,B2,R1,G1,B1
-  ;; PD5     - CLK
-  ;; PD6     - LAT
-  ;; PD7     - OE
+  ;; PB5-PB0 - R2,G2,B2,R1,G1,B1
+  ;; PC2-PC0 - C,B,A
+  ;; PC5     - CLK
+  ;; PC4     - OE
+  ;; PD2     - LAT
   ldi r17, 0xff
   out DDRB, r17      ; all of PORTB will be output
   out PORTB, r0      ; turn off all of port B
   out DDRC, r17      ; all of PORTB will be output
   out PORTC, r0      ; turn off all of port C
-  out DDRD, r17      ; all of PORTD will be output
+  ldi r17, 0x04
+  out DDRD, r17      ; PD2 is output
   out PORTD, r0      ; turn off all of port D
 
   ;; Set up stack ptr
@@ -99,8 +100,7 @@ start:
   sts UCSR0C, r17
   ldi r17, (1<<TXEN0)|(1<<RXEN0)      ; enables send/receive
   sts UCSR0B, r17
-  eor r17, r17
-  sts UCSR0A, r17
+  sts UCSR0A, r0
 
   ;; Set up TIMER1
   lds r17, PRR
@@ -132,14 +132,19 @@ start:
   rcall clear_draw_buffer
 
 ;; DEBUG
-  ldi r24, '*'
-  rcall send_byte
+  ;ldi r20, '*'
+  ;rcall send_byte
   
   ; Interrupts enabled
   sei
 
 main:
   rcall read_byte
+  ;; DEBUG
+  ;ldi r20, '*'
+  ;rcall send_byte
+  ;rjmp main
+  ;; DEBUG
 
   cpi r20, 32            ; if byte sent is > 32 (unsigned) then parse_command
   brsh parse_command
@@ -180,7 +185,8 @@ update_high_section:
   st Y, r17 
 
 back_to_main:
-  sts UDR0, r2           ; send a '*'
+  ldi r20, '*'
+  rcall send_byte
   rjmp main
 
 parse_command:
@@ -227,7 +233,8 @@ not_fa:
 not_f9:
 
 parse_command_exit:
-  sts UDR0, r2            ; send a '*'
+  ldi r20, '*'          ; send '*'
+  rcall send_byte
   rjmp main
 
 page_flip:
@@ -235,22 +242,22 @@ page_flip:
 
 clear_draw_buffer:
   movw r28, r10
-  ldi r20, 0         ; 32 * 16 / 2 = 256 bytes
-memset:
-  st Y+, r0
+  ldi r20, 0         ; for (r20 = 0; r20 < 256; r20++)
+memset:              ; {
+  st Y+, r0          ; [Y++] = 0
   dec r20
-  brne memset
+  brne memset        ; }
   ret
 
 copy_display_buffer:
-  movw r28, r10
-  movw r26, r12
-  ldi r20, 0         ; 32 * 16 / 2 = 256 bytes
-memcpy:
-  ld r21, X+
+  movw r28, r10      ; X = display buffer
+  movw r26, r12      ; Y = draw buffer
+  ldi r20, 0         ; for (r20 = 0; r20 < 256; r20++)
+memcpy:              ; {
+  ld r21, X+         ; [Y++] = [X++]
   st Y+, r21
   dec r20
-  brne memcpy
+  brne memcpy        ; }
   ret
 
 shift_left:
@@ -279,17 +286,17 @@ service_interrupt:
   ldi r18, 32        ; for (r18 = 0; r18 < 32; r18++)
 draw_loop:           ; {
   ld r16, Z+
-  out PORTC, r16
-  sbi PORTD, 5       ; CLK HIGH
-  cbi PORTD, 5       ; CLK LOW
+  out PORTB, r16
+  sbi PORTC, 5       ; CLK HIGH
+  cbi PORTC, 5       ; CLK LOW
   dec r18
   brne draw_loop     ; }
 
-  cbi PORTD, 7       ; Output Disable
-  sbi PORTD, 6       ; Latch on
-  out PORTB, r3      ; Move to current row
-  cbi PORTD, 6       ; Latch off
-  sbi PORTD, 7       ; Output Enable
+  cbi PORTC, 4       ; Output Disable
+  sbi PORTD, 2       ; Latch on
+  out PORTC, r3      ; Move to current row
+  cbi PORTD, 2       ; Latch off
+  sbi PORTC, 4       ; Output Enable
 
   inc r3             ; r3 = (r3 + 1) & 0x07
   ldi r18, 0x07      
@@ -324,5 +331,5 @@ read_byte:
   ret
 
 signature:
-.db "LED Panel 2 - Copyright 2014 - Michael Kohn - Version 0.02",0
+.db "LED Panel 2 - Copyright 2014 - Michael Kohn - Version 0.03",0
 
