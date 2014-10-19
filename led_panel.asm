@@ -124,8 +124,8 @@ start:
   mov r9, r0  ; do not flip buffers
   ldi r28, (SRAM_START)&0xff     ; Y register points to draw buffer
   ldi r29, (SRAM_START)>>8
-  ldi r26, (SRAM_START+512)&0xff ; X register points to display buffer
-  ldi r27, (SRAM_START+512)>>8
+  ldi r26, (SRAM_START+256)&0xff ; X register points to display buffer
+  ldi r27, (SRAM_START+256)>>8
   movw r10, r28
   movw r12, r26
 
@@ -295,15 +295,8 @@ shift_right:
   movw r28, r10       ; Y = draw_buffer + 256
   add r28, r20
   adc r29, r0
-  movw r26, r28       ; X = draw_buffer + 255
+  movw r26, r28       ; X = Y - 1
   adiw r28, 1
-  ;adiw r28, 63
-  ;adiw r28, 63
-  ;adiw r28, 63
-  ;adiw r28, 63
-  ;adiw r28, 3
-  ;movw r26, r18
-  ;adiw r26, 1         ; X = Y - 1
   ldi r20, 255        ; for (r20 = 0; r20 < 255; r20++)
 shift_right_loop:     ; {
   ld r17, -X          ; r17 = [--X]
@@ -320,6 +313,20 @@ shift_right_clear:    ; {
   ret
 
 shift_up:
+  ;; Copy row 8 (aka 0) so it can be copied to row 7 after
+  movw r28, r10       ; Y = draw_buffer
+  ldi r26, (SRAM_START+512)&0xff  ; X area of 32 spare bytes
+  ldi r27, (SRAM_START+512)>>8
+  ldi r20, 32         ; for (r20 = 0; r20 < 32; r20++)
+shift_up_save_row:    ; {
+  ld r17, Y+
+  lsr r17
+  lsr r17
+  lsr r17
+  st X+, r17
+  dec r20
+  brne shift_up_save_row  ; }
+
   movw r28, r10       ; Y = draw_buffer
   movw r26, r10
   adiw r26, 32        ; X = draw_buffer + 32
@@ -333,33 +340,58 @@ shift_up_loop:        ; {
   movw r28, r10
   add r28, r17        ; Y = draw_buffer + 224
   adc r29, r0
+  ldi r26, (SRAM_START+512)&0xff  ; X area of 32 spare bytes
+  ldi r27, (SRAM_START+512)>>8
   ldi r20, 32         ; for (r20 = 0; r20 < 32; r20++)
 shift_up_clear:       ; {
-  ld r17, Y
-  andi r17, 0x07
-  st Y+, r17          ; [Y] = [Y] & 0x07
+  ld r17, X+
+  ;andi r17, 0x07
+  st Y+, r17          ; [Y++] = [X++]
   dec r20
   brne shift_up_clear;}
   ret
 
 shift_down:
-  ldi r20, 255
-  movw r28, r10       ; Y = draw_buffer
+  ;; Copy row 7 so it can be copied to row 8 (aka 0) after
+  movw r28, r10       ; Y = draw_buffer + 224
+  ldi r20, 224
   add r28, r20
   adc r29, r0
-  adiw r28, 1
-  movw r26, r28
-  adiw r26, 32        ; X = draw_buffer + 32
+  ldi r26, (SRAM_START+512)&0xff  ; X area of 32 spare bytes
+  ldi r27, (SRAM_START+512)>>8
+  ldi r20, 32         ; for (r20 = 0; r20 < 32; r20++)
+shift_down_save_row:    ; {
+  ld r17, Y+
+  andi r17, 0x7       ; probably not needed
+  lsl r17
+  lsl r17
+  lsl r17
+  st X+, r17
+  dec r20
+  brne shift_down_save_row  ; }
+
+  ;ldi r20, 255
+  movw r28, r10       ; Y = draw_buffer + 256
+  ;add r28, r20
+  ;adc r29, r0
+  ;adiw r28, 1
+  add r29, r1
+  movw r26, r28       ; X = Y - 32
+  sbiw r26, 32
   ldi r20, 256-32     ; for (r20 = 0; r20 < 256-32; r20++)
 shift_down_loop:        ; {
   ld r17, -X          ; r17 = [--X]
   st -Y, r17          ; [--Y] = r17
   dec r20
   brne shift_down_loop  ; }
+
   movw r28, r10       ; Y = draw_buffer
+  ldi r26, (SRAM_START+512)&0xff  ; X area of 32 spare bytes
+  ldi r27, (SRAM_START+512)>>8
   ldi r20, 32         ; for (r20 = 0; r20 < 32; r20++)
-shift_down_clear:       ; {
-  st Y+, r0           ; [Y] = 0
+shift_down_clear:     ; {
+  ld r17, X+
+  st Y+, r17          ; [Y++] = [X++]
   dec r20
   brne shift_down_clear;}
   ret

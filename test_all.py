@@ -53,6 +53,55 @@ for count in range(0, 11):
   leds.page_flip()
   time.sleep(0.1)
 
+leds.copy_display_buffer()
+color = 1
+for x in range(0, 32):
+  leds.plot(x, 0, color)
+  leds.plot(x, 15, color)
+  color += 1
+  if color == 8: color = 1
+
+for y in range(0, 16):
+  if y < 8: color2 = 1
+  else: color2 = 2
+
+  leds.plot(0, y, color)
+  leds.plot(2, y, color2)
+  leds.plot(31, y, color)
+  color += 1
+  if color == 8: color = 1
+
+leds.page_flip()
+time.sleep(1)
+
+for count in range(0, 11):
+  leds.copy_display_buffer()
+  leds.shift_up()
+  leds.page_flip()
+  time.sleep(0.1)
+
+leds.copy_display_buffer()
+
+for y in range(0, 16):
+  if y < 8: color2 = 1
+  else: color2 = 2
+
+  #leds.plot(0, y, color)
+  leds.plot(8, y, color2)
+  #leds.plot(31, y, color)
+  color += 1
+  if color == 8: color = 1
+
+leds.page_flip()
+
+for count in range(0, 11):
+  leds.copy_display_buffer()
+  leds.shift_down()
+  leds.page_flip()
+  time.sleep(0.1)
+
 #leds.clear_draw_buffer()
 #leds.page_flip()
+
+
 
