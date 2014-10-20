@@ -109,7 +109,7 @@ start:
 
   ldi r17, (30000>>8)
   sts OCR1AH, r17
-  ldi r17, (30000&0xff)          ; compare to 60000
+  ldi r17, (30000&0xff)          ; compare to 30000
   sts OCR1AL, r17
 
   ldi r17, (1<<OCIE1A)
