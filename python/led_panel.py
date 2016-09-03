@@ -1,5 +1,11 @@
 #!/usr/bin/env python
 
+# LED Panel Python module - Copyright 2014-2016 by Michael Kohn
+# Email: mike@mikekohn.net
+#   Web: http://www.mikekohn.net/
+#
+# Control an RGB 32x16 LED panel with Python.
+
 import serial
 
 class led_panel:
